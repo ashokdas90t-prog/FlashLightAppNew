@@ -1,4 +1,4 @@
-name: Flash App Ultimate Final
+name: Flash App Perfect Final
 
 on:
   workflow_dispatch:
@@ -10,13 +10,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Java
-        uses: actions/setup-java@v4
+      - uses: actions/setup-java@v4
         with:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Create Full Android App
+      - name: Create Full App
         run: |
           mkdir -p app/src/main/java/com/example/app
           mkdir -p app/src/main/res/drawable
@@ -29,31 +28,51 @@ jobs:
           import android.os.Bundle;
           import android.widget.FrameLayout;
           import android.widget.TextView;
+          import android.graphics.Color;
+          import android.hardware.camera2.CameraManager;
+          import android.content.Context;
 
           public class MainActivity extends Activity {
 
               boolean isOn = false;
+              CameraManager cameraManager;
+              String cameraId;
 
               @Override
               protected void onCreate(Bundle savedInstanceState) {
                   super.onCreate(savedInstanceState);
 
                   FrameLayout layout = new FrameLayout(this);
-                  layout.setBackgroundColor(0xFF000000);
+                  layout.setBackgroundColor(Color.BLACK);
 
                   TextView text = new TextView(this);
                   text.setText("Flash Light ON");
                   text.setTextSize(24);
-                  text.setTextColor(0xFFFFFFFF);
+                  text.setTextColor(Color.WHITE);
                   text.setGravity(17);
 
                   layout.addView(text);
 
+                  cameraManager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
+                  try {
+                      cameraId = cameraManager.getCameraIdList()[0];
+                  } catch (Exception e) {}
+
                   layout.setOnClickListener(v -> {
-                      if (!isOn) {
-                          layout.setBackgroundResource(R.drawable.bg);
-                          text.setText("");
-                          isOn = true;
+                      try {
+                          if (!isOn) {
+                              cameraManager.setTorchMode(cameraId, true);
+                              layout.setBackgroundResource(R.drawable.bg);
+                              text.setText("Flash Light OFF");
+                              isOn = true;
+                          } else {
+                              cameraManager.setTorchMode(cameraId, false);
+                              layout.setBackgroundColor(Color.BLACK);
+                              text.setText("Flash Light ON");
+                              isOn = false;
+                          }
+                      } catch (Exception e) {
+                          e.printStackTrace();
                       }
                   });
 
@@ -62,10 +81,13 @@ jobs:
           }
           EOF
 
-          # AndroidManifest (FIXED)
+          # Manifest
           cat > app/src/main/AndroidManifest.xml << 'EOF'
           <manifest xmlns:android="http://schemas.android.com/apk/res/android"
               package="com.example.app">
+
+              <uses-permission android:name="android.permission.CAMERA"/>
+              <uses-permission android:name="android.permission.FLASHLIGHT"/>
 
               <application
                   android:label="FlashApp"
@@ -86,11 +108,10 @@ jobs:
           </manifest>
           EOF
 
-          # settings.gradle
+          # Gradle config
           echo 'rootProject.name="FlashApp"' > settings.gradle
           echo "include ':app'" >> settings.gradle
 
-          # root build.gradle
           cat > build.gradle << 'EOF'
           buildscript {
               repositories {
@@ -109,7 +130,6 @@ jobs:
           }
           EOF
 
-          # app build.gradle
           cat > app/build.gradle << 'EOF'
           apply plugin: 'com.android.application'
 
@@ -129,7 +149,7 @@ jobs:
 
           echo "android.useAndroidX=true" > gradle.properties
 
-          # Download correct Gradle
+          # Install correct Gradle
           curl -L https://services.gradle.org/distributions/gradle-7.5-bin.zip -o gradle.zip
           unzip -q gradle.zip
           mv gradle-7.5 gradle-home
