@@ -67,7 +67,6 @@ jobs:
                           } else {
                               cameraManager.setTorchMode(cameraId, false);
                               layout.setBackgroundColor(Color.BLACK);
-                              text.setText("Flash Light ON");
                               isOn = false;
                           }
                       } catch (Exception e) {
