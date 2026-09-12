@@ -63,7 +63,6 @@ jobs:
                           if (!isOn) {
                               cameraManager.setTorchMode(cameraId, true);
                               layout.setBackgroundResource(R.drawable.bg);
-                              text.setText("Flash Light OFF");
                               isOn = true;
                           } else {
                               cameraManager.setTorchMode(cameraId, false);
