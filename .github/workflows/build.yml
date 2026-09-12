@@ -107,6 +107,7 @@ jobs:
           apply plugin: 'com.android.application'
 
           android {
+              namespace "com.example.app"
               compileSdkVersion 33
 
               defaultConfig {
