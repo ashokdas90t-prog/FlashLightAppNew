@@ -1,4 +1,4 @@
-name: Flash App FINAL WORKING
+name: Flash App Ultimate Final
 
 on:
   workflow_dispatch:
@@ -16,11 +16,10 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Create Project + Gradle Wrapper
+      - name: Create Full Android App
         run: |
           mkdir -p app/src/main/java/com/example/app
           mkdir -p app/src/main/res/drawable
-          mkdir -p gradle/wrapper
 
           # MainActivity
           cat > app/src/main/java/com/example/app/MainActivity.java << 'EOF'
@@ -63,18 +62,26 @@ jobs:
           }
           EOF
 
-          # Manifest
+          # AndroidManifest (FIXED)
           cat > app/src/main/AndroidManifest.xml << 'EOF'
           <manifest xmlns:android="http://schemas.android.com/apk/res/android"
               package="com.example.app">
 
-              <application android:label="FlashApp">
-                  <activity android:name=".MainActivity">
+              <application
+                  android:label="FlashApp"
+                  android:theme="@android:style/Theme.Black.NoTitleBar">
+
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true">
+
                       <intent-filter>
                           <action android:name="android.intent.action.MAIN"/>
                           <category android:name="android.intent.category.LAUNCHER"/>
                       </intent-filter>
+
                   </activity>
+
               </application>
           </manifest>
           EOF
@@ -83,7 +90,7 @@ jobs:
           echo 'rootProject.name="FlashApp"' > settings.gradle
           echo "include ':app'" >> settings.gradle
 
-          # Root build.gradle
+          # root build.gradle
           cat > build.gradle << 'EOF'
           buildscript {
               repositories {
@@ -102,7 +109,7 @@ jobs:
           }
           EOF
 
-          # App build.gradle
+          # app build.gradle
           cat > app/build.gradle << 'EOF'
           apply plugin: 'com.android.application'
 
@@ -122,9 +129,9 @@ jobs:
 
           echo "android.useAndroidX=true" > gradle.properties
 
-          # ✅ Gradle Wrapper (IMPORTANT FIX)
+          # Download correct Gradle
           curl -L https://services.gradle.org/distributions/gradle-7.5-bin.zip -o gradle.zip
-          unzip gradle.zip
+          unzip -q gradle.zip
           mv gradle-7.5 gradle-home
 
       - name: Build APK
