@@ -46,7 +46,6 @@ jobs:
                   layout.setBackgroundColor(Color.BLACK);
 
                   TextView text = new TextView(this);
-                  text.setText("Flash Light ON");
                   text.setTextSize(24);
                   text.setTextColor(Color.WHITE);
                   text.setGravity(17);
