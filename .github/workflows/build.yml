@@ -1,4 +1,4 @@
-name: Flash App Final
+name: Flash App Final Working
 
 on:
   workflow_dispatch:
@@ -8,7 +8,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Clone Ready Android Project
+        run: |
+          git clone https://github.com/android/architecture-components-samples.git app
+          cd app
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -16,12 +19,15 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Create App
+      - name: Replace with Simple App
         run: |
+          rm -rf app/*
           mkdir -p app/src/main/java/com/example/app
           mkdir -p app/src/main/res/drawable
 
-          # MainActivity
+          # Copy your image
+          cp app/src/main/res/drawable/bg.jpg app/src/main/res/drawable/bg.jpg || true
+
           cat > app/src/main/java/com/example/app/MainActivity.java << 'EOF'
           package com.example.app;
 
@@ -31,7 +37,6 @@ jobs:
           import android.widget.TextView;
 
           public class MainActivity extends Activity {
-
               boolean isOn = false;
 
               @Override
@@ -62,7 +67,6 @@ jobs:
           }
           EOF
 
-          # Manifest
           cat > app/src/main/AndroidManifest.xml << 'EOF'
           <manifest xmlns:android="http://schemas.android.com/apk/res/android"
               package="com.example.app">
@@ -77,51 +81,6 @@ jobs:
               </application>
           </manifest>
           EOF
-
-          # settings.gradle
-          echo 'rootProject.name="FlashApp"' > settings.gradle
-          echo "include ':app'" >> settings.gradle
-
-          # root build.gradle
-          cat > build.gradle << 'EOF'
-          buildscript {
-              repositories {
-                  google()
-                  mavenCentral()
-              }
-              dependencies {
-                  classpath 'com.android.tools.build:gradle:8.1.1'
-              }
-          }
-          allprojects {
-              repositories {
-                  google()
-                  mavenCentral()
-              }
-          }
-          EOF
-
-          # app build.gradle (FIXED with namespace)
-          cat > app/build.gradle << 'EOF'
-          apply plugin: 'com.android.application'
-
-          android {
-              namespace "com.example.app"
-              compileSdkVersion 33
-
-              defaultConfig {
-                  applicationId "com.example.app"
-                  minSdkVersion 21
-                  targetSdkVersion 33
-                  versionCode 1
-                  versionName "1.0"
-              }
-          }
-          EOF
-
-          echo "android.useAndroidX=true" > gradle.properties
-
-          gradle wrapper
 
       - name: Build APK
         run: ./gradlew assembleDebug
