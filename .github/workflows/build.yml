@@ -1,0 +1,137 @@
+name: Simple Flash App Build
+
+on:
+  push:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Create Project
+        run: |
+          mkdir -p app/src/main/java/com/example/app
+          mkdir -p app/src/main/res/layout
+          mkdir -p app/src/main/res/drawable
+
+          # MainActivity
+          cat > app/src/main/java/com/example/app/MainActivity.java << 'EOF'
+          package com.example.app;
+
+          import android.app.Activity;
+          import android.os.Bundle;
+          import android.view.View;
+          import android.widget.TextView;
+          import android.widget.FrameLayout;
+
+          public class MainActivity extends Activity {
+
+              boolean isOn = false;
+
+              @Override
+              protected void onCreate(Bundle savedInstanceState) {
+                  super.onCreate(savedInstanceState);
+
+                  FrameLayout layout = new FrameLayout(this);
+                  layout.setBackgroundColor(0xFF000000);
+
+                  TextView text = new TextView(this);
+                  text.setText("Flash Light ON");
+                  text.setTextSize(24);
+                  text.setTextColor(0xFFFFFFFF);
+                  text.setGravity(17);
+
+                  layout.addView(text);
+
+                  layout.setOnClickListener(v -> {
+                      if (!isOn) {
+                          layout.setBackgroundResource(R.drawable.bg);
+                          text.setText("");
+                          isOn = true;
+                      }
+                  });
+
+                  setContentView(layout);
+              }
+          }
+          EOF
+
+          # Manifest
+          cat > app/src/main/AndroidManifest.xml << 'EOF'
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android"
+              package="com.example.app">
+
+              <application android:label="FlashApp">
+                  <activity android:name=".MainActivity">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN"/>
+                          <category android:name="android.intent.category.LAUNCHER"/>
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+
+          # layout dummy
+          echo "<resources></resources>" > app/src/main/res/layout/dummy.xml
+
+          # Gradle files
+          cat > settings.gradle << 'EOF'
+          rootProject.name="FlashApp"
+          include ':app'
+          EOF
+
+          cat > build.gradle << 'EOF'
+          buildscript {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+              dependencies {
+                  classpath 'com.android.tools.build:gradle:8.2.0'
+              }
+          }
+          allprojects {
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          EOF
+
+          cat > app/build.gradle << 'EOF'
+          apply plugin: 'com.android.application'
+
+          android {
+              compileSdkVersion 34
+
+              defaultConfig {
+                  applicationId "com.example.app"
+                  minSdkVersion 21
+                  targetSdkVersion 34
+                  versionCode 1
+                  versionName "1.0"
+              }
+          }
+
+          dependencies {}
+          EOF
+
+          cat > gradle.properties << 'EOF'
+          android.useAndroidX=true
+          EOF
+
+          # Gradle wrapper
+          gradle wrapper
+
+      - name: Build APK
+        run: ./gradlew assembleDebug
+
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: app-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
