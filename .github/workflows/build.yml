@@ -1,4 +1,4 @@
-name: Flash App Final
+name: Flash App FINAL WORKING
 
 on:
   workflow_dispatch:
@@ -8,8 +8,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Setup Java
         uses: actions/setup-java@v4
@@ -17,13 +16,11 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Install Gradle
-        run: sudo apt-get update && sudo apt-get install -y gradle
-
-      - name: Create Project
+      - name: Create Project + Gradle Wrapper
         run: |
           mkdir -p app/src/main/java/com/example/app
           mkdir -p app/src/main/res/drawable
+          mkdir -p gradle/wrapper
 
           # MainActivity
           cat > app/src/main/java/com/example/app/MainActivity.java << 'EOF'
@@ -66,7 +63,7 @@ jobs:
           }
           EOF
 
-          # AndroidManifest
+          # Manifest
           cat > app/src/main/AndroidManifest.xml << 'EOF'
           <manifest xmlns:android="http://schemas.android.com/apk/res/android"
               package="com.example.app">
@@ -97,7 +94,6 @@ jobs:
                   classpath 'com.android.tools.build:gradle:7.4.2'
               }
           }
-
           allprojects {
               repositories {
                   google()
@@ -126,8 +122,13 @@ jobs:
 
           echo "android.useAndroidX=true" > gradle.properties
 
+          # ✅ Gradle Wrapper (IMPORTANT FIX)
+          curl -L https://services.gradle.org/distributions/gradle-7.5-bin.zip -o gradle.zip
+          unzip gradle.zip
+          mv gradle-7.5 gradle-home
+
       - name: Build APK
-        run: gradle assembleDebug
+        run: ./gradle-home/bin/gradle assembleDebug
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
