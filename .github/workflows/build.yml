@@ -1,8 +1,7 @@
-name: Simple Flash App Build
+name: Flash App Build
 
 on:
-  push:
-    branches: [ "main" ]
+  workflow_dispatch:
 
 jobs:
   build:
@@ -11,7 +10,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Create Project
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      - name: Create Project Files
         run: |
           mkdir -p app/src/main/java/com/example/app
           mkdir -p app/src/main/res/layout
@@ -23,12 +28,10 @@ jobs:
 
           import android.app.Activity;
           import android.os.Bundle;
-          import android.view.View;
-          import android.widget.TextView;
           import android.widget.FrameLayout;
+          import android.widget.TextView;
 
           public class MainActivity extends Activity {
-
               boolean isOn = false;
 
               @Override
@@ -63,7 +66,6 @@ jobs:
           cat > app/src/main/AndroidManifest.xml << 'EOF'
           <manifest xmlns:android="http://schemas.android.com/apk/res/android"
               package="com.example.app">
-
               <application android:label="FlashApp">
                   <activity android:name=".MainActivity">
                       <intent-filter>
@@ -75,15 +77,13 @@ jobs:
           </manifest>
           EOF
 
-          # layout dummy
-          echo "<resources></resources>" > app/src/main/res/layout/dummy.xml
-
-          # Gradle files
+          # settings.gradle
           cat > settings.gradle << 'EOF'
           rootProject.name="FlashApp"
           include ':app'
           EOF
 
+          # build.gradle (root)
           cat > build.gradle << 'EOF'
           buildscript {
               repositories {
@@ -91,7 +91,7 @@ jobs:
                   mavenCentral()
               }
               dependencies {
-                  classpath 'com.android.tools.build:gradle:8.2.0'
+                  classpath 'com.android.tools.build:gradle:8.1.1'
               }
           }
           allprojects {
@@ -102,33 +102,31 @@ jobs:
           }
           EOF
 
+          # app/build.gradle
           cat > app/build.gradle << 'EOF'
           apply plugin: 'com.android.application'
 
           android {
-              compileSdkVersion 34
+              compileSdkVersion 33
 
               defaultConfig {
                   applicationId "com.example.app"
                   minSdkVersion 21
-                  targetSdkVersion 34
+                  targetSdkVersion 33
                   versionCode 1
                   versionName "1.0"
               }
           }
-
-          dependencies {}
           EOF
 
-          cat > gradle.properties << 'EOF'
-          android.useAndroidX=true
-          EOF
+          # gradle.properties
+          echo "android.useAndroidX=true" > gradle.properties
 
-          # Gradle wrapper
+          # gradle wrapper
           gradle wrapper
 
       - name: Build APK
-        run: ./gradlew assembleDebug
+        run: ./gradlew assembleDebug --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
