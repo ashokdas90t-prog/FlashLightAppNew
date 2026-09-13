@@ -1,4 +1,4 @@
-name: Flash App Perfect Final
+name: Flash App Final Clean
 
 on:
   workflow_dispatch:
@@ -15,7 +15,7 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Create Full App
+      - name: Create App
         run: |
           mkdir -p app/src/main/java/com/example/app
           mkdir -p app/src/main/res/drawable
@@ -46,6 +46,7 @@ jobs:
                   layout.setBackgroundColor(Color.BLACK);
 
                   TextView text = new TextView(this);
+                  text.setText("Flash Light ON");
                   text.setTextSize(24);
                   text.setTextColor(Color.WHITE);
                   text.setGravity(17);
@@ -62,10 +63,16 @@ jobs:
                           if (!isOn) {
                               cameraManager.setTorchMode(cameraId, true);
                               layout.setBackgroundResource(R.drawable.bg);
+
+                              text.setText(""); // 🔥 text remove
+
                               isOn = true;
                           } else {
                               cameraManager.setTorchMode(cameraId, false);
                               layout.setBackgroundColor(Color.BLACK);
+
+                              text.setText("Flash Light ON"); // আবার ফিরে আসবে
+
                               isOn = false;
                           }
                       } catch (Exception e) {
@@ -105,7 +112,7 @@ jobs:
           </manifest>
           EOF
 
-          # Gradle config
+          # Gradle setup
           echo 'rootProject.name="FlashApp"' > settings.gradle
           echo "include ':app'" >> settings.gradle
 
@@ -146,7 +153,7 @@ jobs:
 
           echo "android.useAndroidX=true" > gradle.properties
 
-          # Install correct Gradle
+          # Gradle install
           curl -L https://services.gradle.org/distributions/gradle-7.5-bin.zip -o gradle.zip
           unzip -q gradle.zip
           mv gradle-7.5 gradle-home
