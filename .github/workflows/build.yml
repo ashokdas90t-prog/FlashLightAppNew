@@ -1,168 +1,162 @@
-name: Flash App Final Clean
+name: Analyze FlashFy Flutter AOT
 
 on:
   workflow_dispatch:
+  push:
+    paths:
+      - "base.apk"
+      - "split_config.arm64_v8a.apk"
+      - "split_config.en.apk"
+      - "split_config.xxhdpi.apk"
+      - ".github/workflows/analyze-flashfy-aot-v4.yml"
 
 jobs:
-  build:
+  analyze:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-java@v4
-        with:
-          distribution: 'temurin'
-          java-version: '17'
-
-      - name: Create App
+      - name: Check APK inputs
+        shell: bash
         run: |
-          mkdir -p app/src/main/java/com/example/app
-          mkdir -p app/src/main/res/drawable
+          set -euo pipefail
 
-          # MainActivity
-          cat > app/src/main/java/com/example/app/MainActivity.java << 'EOF'
-          package com.example.app;
+          for f in \
+            base.apk \
+            split_config.arm64_v8a.apk \
+            split_config.en.apk \
+            split_config.xxhdpi.apk
+          do
+            test -s "$f" || {
+              echo "Missing APK: $f"
+              exit 1
+            }
+          done
 
-          import android.app.Activity;
-          import android.os.Bundle;
-          import android.widget.FrameLayout;
-          import android.widget.TextView;
-          import android.graphics.Color;
-          import android.hardware.camera2.CameraManager;
-          import android.content.Context;
+          echo "APK inputs: PASS"
 
-          public class MainActivity extends Activity {
-
-              boolean isOn = false;
-              CameraManager cameraManager;
-              String cameraId;
-
-              @Override
-              protected void onCreate(Bundle savedInstanceState) {
-                  super.onCreate(savedInstanceState);
-
-                  FrameLayout layout = new FrameLayout(this);
-                  layout.setBackgroundColor(Color.BLACK);
-
-                  TextView text = new TextView(this);
-                  text.setText("Flash Light ON");
-                  text.setTextSize(24);
-                  text.setTextColor(Color.WHITE);
-                  text.setGravity(17);
-
-                  layout.addView(text);
-
-                  cameraManager = (CameraManager) getSystemService(Context.CAMERA_SERVICE);
-                  try {
-                      cameraId = cameraManager.getCameraIdList()[0];
-                  } catch (Exception e) {}
-
-                  layout.setOnClickListener(v -> {
-                      try {
-                          if (!isOn) {
-                              cameraManager.setTorchMode(cameraId, true);
-                              layout.setBackgroundResource(R.drawable.bg);
-
-                              text.setText(""); // 🔥 text remove
-
-                              isOn = true;
-                          } else {
-                              cameraManager.setTorchMode(cameraId, false);
-                              layout.setBackgroundColor(Color.BLACK);
-
-                              text.setText("Flash Light ON"); // আবার ফিরে আসবে
-
-                              isOn = false;
-                          }
-                      } catch (Exception e) {
-                          e.printStackTrace();
-                      }
-                  });
-
-                  setContentView(layout);
-              }
-          }
-          EOF
-
-          # Manifest
-          cat > app/src/main/AndroidManifest.xml << 'EOF'
-          <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-              package="com.example.app">
-
-              <uses-permission android:name="android.permission.CAMERA"/>
-              <uses-permission android:name="android.permission.FLASHLIGHT"/>
-
-              <application
-                  android:label="FlashApp"
-                  android:theme="@android:style/Theme.Black.NoTitleBar">
-
-                  <activity
-                      android:name=".MainActivity"
-                      android:exported="true">
-
-                      <intent-filter>
-                          <action android:name="android.intent.action.MAIN"/>
-                          <category android:name="android.intent.category.LAUNCHER"/>
-                      </intent-filter>
-
-                  </activity>
-
-              </application>
-          </manifest>
-          EOF
-
-          # Gradle setup
-          echo 'rootProject.name="FlashApp"' > settings.gradle
-          echo "include ':app'" >> settings.gradle
-
-          cat > build.gradle << 'EOF'
-          buildscript {
-              repositories {
-                  google()
-                  mavenCentral()
-              }
-              dependencies {
-                  classpath 'com.android.tools.build:gradle:7.4.2'
-              }
-          }
-          allprojects {
-              repositories {
-                  google()
-                  mavenCentral()
-              }
-          }
-          EOF
-
-          cat > app/build.gradle << 'EOF'
-          apply plugin: 'com.android.application'
-
-          android {
-              namespace "com.example.app"
-              compileSdkVersion 33
-
-              defaultConfig {
-                  applicationId "com.example.app"
-                  minSdkVersion 21
-                  targetSdkVersion 33
-                  versionCode 1
-                  versionName "1.0"
-              }
-          }
-          EOF
-
-          echo "android.useAndroidX=true" > gradle.properties
-
-          # Gradle install
-          curl -L https://services.gradle.org/distributions/gradle-7.5-bin.zip -o gradle.zip
-          unzip -q gradle.zip
-          mv gradle-7.5 gradle-home
-
-      - name: Build APK
-        run: ./gradle-home/bin/gradle assembleDebug
-
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
+      - name: Setup Java 17
+        uses: actions/setup-java@v5
         with:
-          name: app-debug
-          path: app/build/outputs/apk/debug/app-debug.apk
+          distribution: temurin
+          java-version: "17"
+
+      - name: Download APKEditor
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          curl -fL \
+            "https://github.com/REAndroid/APKEditor/releases/download/V1.4.9/APKEditor-1.4.9.jar" \
+            -o APKEditor.jar
+
+          test -s APKEditor.jar
+
+      - name: Merge original split APKs
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          rm -rf work
+
+          mkdir -p \
+            work/splits \
+            work/info \
+            work/native \
+            work/decompile \
+            work/focused
+
+          cp \
+            base.apk \
+            split_config.arm64_v8a.apk \
+            split_config.en.apk \
+            split_config.xxhdpi.apk \
+            work/splits/
+
+          java -Xmx4g -jar APKEditor.jar \
+            m \
+            -i work/splits \
+            -o work/flashfy.apk
+
+          test -s work/flashfy.apk
+
+          unzip -l work/flashfy.apk \
+            | grep -q "lib/arm64-v8a/libapp.so"
+
+          echo "Merged APK: PASS"
+
+      - name: Download matching flutterdec release
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          VERSION="v0.1.0-alpha.4"
+          ARCHIVE="flutterdec-${VERSION}-Linux-X64.tar.gz"
+
+          curl -fL \
+            "https://github.com/caverav/flutterdec/releases/download/${VERSION}/${ARCHIVE}" \
+            -o "work/${ARCHIVE}"
+
+          test -s "work/${ARCHIVE}"
+
+          mkdir -p work/flutterdec
+
+          tar -xzf \
+            "work/${ARCHIVE}" \
+            -C work/flutterdec
+
+          echo "=== RELEASE LAYOUT ==="
+
+          find work/flutterdec \
+            -maxdepth 8 \
+            -type f \
+            -print \
+            | sort
+
+          FLUTTERDEC_BIN="$(
+            find work/flutterdec \
+              -type f \
+              -path '*/bin/flutterdec' \
+              -print \
+              -quit
+          )"
+
+          if [ -z "$FLUTTERDEC_BIN" ]; then
+            FLUTTERDEC_BIN="$(
+              find work/flutterdec \
+                -type f \
+                -name flutterdec \
+                -print \
+                -quit
+            )"
+          fi
+
+          test -n "$FLUTTERDEC_BIN" || {
+            echo "ERROR: flutterdec binary not found."
+            exit 1
+          }
+
+          chmod +x "$FLUTTERDEC_BIN"
+
+          FLUTTERDEC_BIN="$(realpath "$FLUTTERDEC_BIN")"
+
+          echo "FLUTTERDEC_BIN=$FLUTTERDEC_BIN" >> "$GITHUB_ENV"
+
+          echo "Using release binary:"
+          echo "$FLUTTERDEC_BIN"
+
+          "$FLUTTERDEC_BIN" --version
+
+          echo "=== RELEASE DATA ==="
+
+          BIN_DIR="$(dirname "$FLUTTERDEC_BIN")"
+          PREFIX_DIR="$(dirname "$BIN_DIR")"
+
+          find "$PREFIX_DIR" \
+            -maxdepth 8 \
+            -type f \
+            \( \
+              -name registry
