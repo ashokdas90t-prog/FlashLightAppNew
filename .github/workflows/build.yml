@@ -357,11 +357,3 @@ jobs:
             work/decompile.stderr
             work/decompile/**
             work/focused/**
-
-এবার workflow-টা APK merge করবে না, কারণ "flutterdec" সরাসরি "libapp.so" নিতে পারে।
-
-আর "decompile" exit code "1" হলেও artifact থাকলে workflow-কে সফল ধরা হয়েছে—কারণ Flutterdec-এর strict quality gate বাস্তব Flutter app-এ non-zero দিতে পারে, অথচ useful artifacts লিখে দিতে পারে।
-
-এবার লক্ষ্য: সবুজ run + "FlashFy-AOT-analysis" artifact। তারপর সেই artifact থেকেই lamp-এর actual function বের করে final installable APK patch-এর দিকে যাব।
-
-তুমি কোনটা চাও—AOT analysis আগে, নাকি সরাসরি final APK patch workflow?
