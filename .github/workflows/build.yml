@@ -11,349 +11,131 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Check APK inputs
+      - name: Check FlashFy input
         shell: bash
         run: |
-          set -euo pipefail
-
-          test -f split_config.arm64_v8a.apk || {
-            echo "Missing split_config.arm64_v8a.apk"
-            exit 1
-          }
-
-          echo "ARM64 split found:"
-          ls -lh split_config.arm64_v8a.apk
+          set -e
+          test -f split_config.arm64_v8a.apk
+          mkdir -p work/native
+          echo "FlashFy input OK"
 
       - name: Extract libapp.so
         shell: bash
         run: |
-          set -euo pipefail
-
-          mkdir -p work/native
-
+          set -e
           unzip -p \
             split_config.arm64_v8a.apk \
             lib/arm64-v8a/libapp.so \
             > work/native/libapp.so
-
           test -s work/native/libapp.so
-
-          echo "libapp.so:"
           ls -lh work/native/libapp.so
 
-      - name: Install Nix
-        uses: cachix/install-nix-action@v31
+      - name: Install Go
+        uses: actions/setup-go@v5
         with:
-          github_access_token: ${{ secrets.GITHUB_TOKEN }}
+          go-version: '1.25'
 
-      - name: Locate Flutter AOT snapshot
+      - name: Build AOTopsy
         shell: bash
         run: |
-          set -euo pipefail
-
-          mkdir -p work
-
-          echo "Running flutterdec info..."
-
-          set +e
-
-          nix run github:caverav/flutterdec -- \
-            info work/native/libapp.so --json \
-            > work/info.raw 2> work/info.stderr
-
-          RC=$?
-
           set -e
+          git clone --depth 1 https://github.com/BroNils/aotopsy.git work/aotopsy-src
+          cd work/aotopsy-src
+          make build
+          test -x ./aotopsy
+          ./aotopsy doctor ../native/libapp.so
 
-          echo "flutterdec info exit code: $RC"
-
-          echo "=== stderr ==="
-          cat work/info.stderr || true
-
-          echo "=== raw output ==="
-          cat work/info.raw || true
-
-          # Extract the JSON object even if the command printed
-          # additional non-JSON text around it.
-          python3 - <<'PY'
-          import json
-          from pathlib import Path
-
-          raw = Path("work/info.raw").read_text(
-              encoding="utf-8",
-              errors="replace"
-          )
-
-          decoder = json.JSONDecoder()
-          found = None
-
-          for i, ch in enumerate(raw):
-              if ch != "{":
-                  continue
-
-              try:
-                  obj, end = decoder.raw_decode(raw[i:])
-                  if isinstance(obj, dict) and "snapshot_hash" in obj:
-                      found = obj
-              except Exception:
-                  pass
-
-          if found is None:
-              print("Could not find flutterdec JSON.")
-              raise SystemExit(1)
-
-          Path("work/info.json").write_text(
-              json.dumps(found, indent=2),
-              encoding="utf-8"
-          )
-
-          print(json.dumps(found, indent=2))
-
-          snapshot = found.get("snapshot_hash")
-          if not snapshot:
-              raise SystemExit("snapshot_hash missing")
-
-          print("SNAPSHOT_HASH=" + snapshot)
-
-          Path("work/snapshot_hash").write_text(
-              snapshot,
-              encoding="utf-8"
-          )
-          PY
-
-          HASH="$(cat work/snapshot_hash)"
-
-          echo "Detected snapshot hash:"
-          echo "$HASH"
-
-          echo "SNAPSHOT_HASH=$HASH" >> "$GITHUB_ENV"
-
-      - name: Verify FlashFy snapshot
+      - name: Recover FlashFy functions
         shell: bash
         run: |
-          set -euo pipefail
-
-          EXPECTED="78da37fed6bf1489361a312568249f3f"
-
-          echo "Expected: $EXPECTED"
-          echo "Detected: $SNAPSHOT_HASH"
-
-          if [ "$SNAPSHOT_HASH" != "$EXPECTED" ]; then
-            echo "ERROR: This is not the expected FlashFy snapshot."
-            exit 1
-          fi
-
-          echo "FlashFy snapshot confirmed."
-
-      - name: Prepare adapter store
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          rm -rf work/adapter-store
-          mkdir -p work/adapter-store
-
-          echo "FLUTTERDEC_ADAPTER_STORE=$GITHUB_WORKSPACE/work/adapter-store" \
-            >> "$GITHUB_ENV"
-
-      - name: Install exact AOT adapter
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          echo "Installing adapter for:"
-          echo "$SNAPSHOT_HASH"
-
           set +e
+          mkdir -p work/aotopsy
 
-          nix run github:caverav/flutterdec -- \
-            adapter install \
-            --dart-hash "$SNAPSHOT_HASH" \
-            --json \
-            > work/adapter-install.raw \
-            2> work/adapter-install.stderr
-
-          RC=$?
-
-          set -e
-
-          echo "adapter install exit code: $RC"
-
-          echo "=== adapter stderr ==="
-          cat work/adapter-install.stderr || true
-
-          echo "=== adapter output ==="
-          cat work/adapter-install.raw || true
-
-          cp work/adapter-install.raw work/adapter-install.json
-
-          # Installation must succeed.
-          if [ "$RC" -ne 0 ]; then
-            echo "Adapter installation failed."
-            exit "$RC"
-          fi
-
-      - name: Verify adapter
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          set +e
-
-          nix run github:caverav/flutterdec -- \
-            adapter list --json \
-            > work/adapter-list.raw \
-            2> work/adapter-list.stderr
-
-          RC=$?
-
-          set -e
-
-          echo "adapter list exit code: $RC"
-
-          cat work/adapter-list.stderr || true
-          cat work/adapter-list.raw || true
-
-          cp work/adapter-list.raw work/adapter-list.json
-
-          python3 - <<'PY'
-          from pathlib import Path
-
-          text = Path("work/adapter-list.raw").read_text(
-              encoding="utf-8",
-              errors="replace"
-          )
-
-          lower = text.lower()
-
-          if "verified" not in lower:
-              print(text)
-              raise SystemExit(
-                  "Matching adapter is NOT verified."
-              )
-
-          if "78da37fed6bf1489361a312568249f3f" not in lower:
-              print(text)
-              raise SystemExit(
-                  "Expected snapshot hash is missing from adapter list."
-              )
-
-          print("MATCHING ADAPTER VERIFIED.")
-          PY
-
-      - name: Decompile FlashFy AOT
-        shell: bash
-        run: |
-          set -euo pipefail
-
-          rm -rf work/decompile
-          mkdir -p work/decompile
-
-          set +e
-
-          nix run github:caverav/flutterdec -- \
-            decompile \
+          ./work/aotopsy-src/aotopsy \
             work/native/libapp.so \
-            -o work/decompile \
-            --emit-asm \
-            --emit-ir \
-            --emit-ghidra-script \
-            --emit-ida-script \
-            --function-scope all \
-            > work/decompile.raw \
-            2> work/decompile.stderr
+            --out work/aotopsy \
+            --decompile
 
           RC=$?
 
           set -e
 
-          echo "Decompile exit code: $RC"
+          echo "AOTopsy exit code: $RC"
+          find work/aotopsy -maxdepth 3 -type f -print | sort || true
 
-          cat work/decompile.stderr || true
-
-          # flutterdec may return 1 because of its quality gate
-          # while still producing all useful artifacts.
-          if find work/decompile -type f -print -quit | grep -q .; then
-            echo "Decompile artifacts found."
+          if find work/aotopsy -type f -print -quit | grep -q .; then
             exit 0
           fi
 
-          echo "No decompile artifacts were produced."
           exit "$RC"
 
-      - name: Locate FlashFy lamp painter
+      - name: Target painter functions
         shell: bash
         run: |
-          set -euo pipefail
-
-          mkdir -p work/focused
-
-          strings -t x work/native/libapp.so \
-            | grep -E \
-            '_RopeBulbPainter|_drawBulb|_drawPullRope|_BackgroundPainter|_paintBackgroundImage|_paintBackgroundColor|_drawImageScaledAndCentered|isFlashOn|FlashfyScreen|_FlashfyScreenState' \
-            | tee work/focused/painter-strings.txt || true
+          set +e
+          mkdir -p work/targeted
 
           grep -RniE \
-            '_RopeBulbPainter|_drawBulb|_drawPullRope|_BackgroundPainter|_paintBackgroundImage|_paintBackgroundColor|_drawImageScaledAndCentered|isFlashOn|FlashfyScreen|_FlashfyScreenState' \
-            work/decompile \
-            > work/focused/painter-code.txt || true
+            '_RopeBulbPainter|_drawBulb|_drawPullRope|_BackgroundPainter|_paintBackgroundImage|_paintBackgroundColor|_drawImageScaledAndCentered|isFlashOn|_FlashfyScreenState|FlashfyScreen' \
+            work/aotopsy \
+            > work/targeted/function-matches.txt
 
-          echo "=== Painter strings ==="
-          cat work/focused/painter-strings.txt || true
+          ./work/aotopsy-src/aotopsy \
+            _debug decompile-native \
+            --lib work/native/libapp.so \
+            --find _RopeBulbPainter \
+            > work/targeted/ropebulb.txt \
+            2>&1 || true
 
-          echo
-          echo "=== Painter references ==="
-          cat work/focused/painter-code.txt || true
+          ./work/aotopsy-src/aotopsy \
+            _debug decompile-native \
+            --lib work/native/libapp.so \
+            --find _BackgroundPainter \
+            > work/targeted/background.txt \
+            2>&1 || true
 
-      - name: Build final report
+          ./work/aotopsy-src/aotopsy \
+            _debug decompile-native \
+            --lib work/native/libapp.so \
+            --find _FlashfyScreenState \
+            > work/targeted/screenstate.txt \
+            2>&1 || true
+
+          ./work/aotopsy-src/aotopsy \
+            _debug strings \
+            --lib work/native/libapp.so \
+            --find _RopeBulbPainter \
+            --xref \
+            > work/targeted/ropebulb-xref.txt \
+            2>&1 || true
+
+          cat work/targeted/*.txt || true
+
+      - name: Create report
         shell: bash
         run: |
-          set -euo pipefail
-
           {
-            echo "FlashFy Flutter AOT Analysis"
-            echo "============================="
+            echo "FlashFy AOT analysis"
             echo
-            echo "Snapshot hash:"
-            cat work/snapshot_hash
+            echo "Painter symbols:"
+            strings -t x work/native/libapp.so |
+              grep -E \
+              '_RopeBulbPainter|_drawBulb|_drawPullRope|_BackgroundPainter|_paintBackgroundImage|_paintBackgroundColor|_drawImageScaledAndCentered|isFlashOn|_FlashfyScreenState|FlashfyScreen' \
+              || true
             echo
-            echo "=== Flutterdec info ==="
-            cat work/info.json
-            echo
-            echo "=== Adapter install ==="
-            cat work/adapter-install.json || true
-            echo
-            echo "=== Adapter list ==="
-            cat work/adapter-list.json || true
-            echo
-            echo "=== Painter strings ==="
-            cat work/focused/painter-strings.txt || true
-            echo
-            echo "=== Painter decompile references ==="
-            cat work/focused/painter-code.txt || true
-            echo
-            echo "=== Decompile files ==="
-            find work/decompile -type f | sort || true
-          } > work/focused/REPORT.txt
+            echo "Targeted analysis:"
+            cat work/targeted/*.txt 2>/dev/null || true
+          } > REPORT.txt
 
-          cat work/focused/REPORT.txt
+          cat REPORT.txt
 
-      - name: Upload complete AOT analysis
+      - name: Upload analysis
         uses: actions/upload-artifact@v4
         with:
-          name: FlashFy-AOT-analysis
+          name: FlashFy-AOTopsy-analysis
           if-no-files-found: error
           path: |
-            work/info.json
-            work/info.raw
-            work/info.stderr
-            work/snapshot_hash
-            work/adapter-install.json
-            work/adapter-install.stderr
-            work/adapter-list.json
-            work/adapter-list.stderr
+            REPORT.txt
             work/native/libapp.so
-            work/decompile.raw
-            work/decompile.stderr
-            work/decompile/**
-            work/focused/**
+            work/aotopsy/**
+            work/targeted/**
